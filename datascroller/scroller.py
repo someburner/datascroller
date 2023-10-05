@@ -12,7 +12,7 @@ from datascroller import keybindings as keys
 class DFWindow:
     """The data frame window"""
 
-    def __init__(self, pandas_df, viewing_area, reader=None):
+    def __init__(self, pandas_df, viewing_area, reader=None, title: str=""):
         self.full_df = pandas_df
         (self.total_rows, self.total_cols) = pandas_df.shape
 
@@ -61,6 +61,21 @@ class DFWindow:
                            str(self.total_cols))
 
         return location_string
+
+
+    def add_title(self, screen, cols, rows, title):
+        if len(title):
+            width = cols
+            if len(title) > cols:
+                width = cols - 2
+            else:
+                width = int(len(title) * 2)
+            height = 3
+            box1 = screen.subwin(height, width, 1, int(cols / 2))
+            box1.immedok(True)  # updates automatically
+            box1.erase()  # clears text
+            box1.box()  # adds border
+            box1.addstr(1, len(title) // 2, title, curses.A_BOLD)
 
     def update_dataframe_coords(self, start_row=0, start_col=0):
         self.r_1 = start_row
@@ -285,6 +300,7 @@ class ViewingArea:
         self.highlight_mode = False
         self.highlight_row = 0
 
+
     def _create_list_of_rowstrings(self):
         """prints a representation of the viewing area to aid understanding"""
         row_list = []
@@ -452,15 +468,20 @@ def print_user_error(stdscr, error):
     stdscr.chgat(0, 30, len("Error: " + error), curses.A_BOLD | curses.color_pair(3))
 
 
-def key_press_and_print_df(stdscr, df, reader=None):
+def key_press_and_print_df(stdscr, df, reader=None, title=""):
     curses.curs_set(0)
     # stdscr = curses.initscr()
     stdscr.clear()
-    viewing_area = ViewingArea(8, 2)
+
+    y_off_init = 2
+    if len(title):
+        y_off_init += 2
+    viewing_area = ViewingArea(8, y_off_init)
     term_cols, term_rows = viewing_area.get_terminal_size()
-    df_window = DFWindow(df, viewing_area, reader)
+    df_window = DFWindow(df, viewing_area, reader, title)
 
     df_window.add_data_to_screen(stdscr)
+    df_window.add_title(stdscr, term_cols, term_rows, title)
 
     help_view = False
     err_string = ""
@@ -532,10 +553,10 @@ def key_press_and_print_df(stdscr, df, reader=None):
 
         elif key == keys.BACK:
             # exit query mode, essentially
-            df_window = DFWindow(df, viewing_area)
+            df_window = DFWindow(df, viewing_area, title)
 
         elif key == curses.KEY_RESIZE:
-            viewing_area = ViewingArea(8, 2)
+            viewing_area = ViewingArea(8, y_off_init)
             term_cols, term_rows = viewing_area.get_terminal_size()
             df_window.update_viewing_area(viewing_area)
             df_window.add_data_to_screen(stdscr)
@@ -544,6 +565,7 @@ def key_press_and_print_df(stdscr, df, reader=None):
             df_window = df_window.get_next_chunk()
 
         stdscr.clear()
+        df_window.add_title(stdscr, term_cols, term_rows, title)
         df_window.add_data_to_screen(stdscr)
         stdscr.addstr(0, 0, df_window.get_location_string())
         print_user_alert(stdscr, help.HELP_MESSAGE)
@@ -561,15 +583,15 @@ def key_press_and_print_df(stdscr, df, reader=None):
     curses.endwin()
 
 
-def scroll(df_or_reader):
+def scroll(df_or_reader, title: str=""):
     if isinstance(df_or_reader, pd.core.frame.DataFrame):
-        curses.wrapper(key_press_and_print_df, df_or_reader)
+        curses.wrapper(key_press_and_print_df, df_or_reader, title=title)
     elif isinstance(df_or_reader, pd.io.parsers.TextFileReader):
         first_chunk = df_or_reader.get_chunk()
-        curses.wrapper(key_press_and_print_df, first_chunk, df_or_reader)
+        curses.wrapper(key_press_and_print_df, first_chunk, df_or_reader, title=title)
     elif isinstance(df_or_reader, pyarrow.lib.Table):
         df = df_or_reader.to_pandas()
-        curses.wrapper(key_press_and_print_df, df)
+        curses.wrapper(key_press_and_print_df, df, title=title)
     else:
         print('type ' + str(type(df_or_reader)) + ' not yet scrollable!')
 
